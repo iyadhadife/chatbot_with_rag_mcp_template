@@ -10,14 +10,13 @@ def get_embeddings():
     """
     Charge le modèle d'embedding défini dans le .env
     """
-    model_path = os.getenv('EMBEDDING_MODEL_PATH')
+    model_path = os.getenv('EMBEDDING_MODEL_PATH', '')
     
     if not model_path:
         raise ValueError("La variable EMBEDDING_MODEL_PATH n'est pas définie dans le .env")
     
     print(f"🔄 Chargement du modèle d'embedding : {model_path}...")
     
-    # device='cpu' ou 'cuda' si tu as une carte graphique NVIDIA
     embeddings = HuggingFaceEmbeddings(
         model_name=model_path,
         model_kwargs={'device': 'cpu'} 
