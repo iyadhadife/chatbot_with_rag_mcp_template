@@ -5,15 +5,9 @@ from dotenv import load_dotenv
 import os
 
 async def envoyer_requete():
-    url = "http://localhost:8000/sse" # Vérifie bien le port !
+    url = "http://localhost:8000/sse" 
     
-    # COPIE LE TOKEN DEPUIS TON TERMINAL ICI
     load_dotenv()
-    # token = os.getenv('TOKEN_FOR_MCP_SERVER')
-    
-    # headers = {
-    #     "Authorization": f"Bearer {token}"
-    # }
 
     print(f"🌐 Connexion à l'inspecteur...")
     try:
