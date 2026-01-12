@@ -27,7 +27,7 @@ def get_vectorstore():
     """
     Récupère la base de données vectorielle existante
     """
-    persist_dir = os.getenv('CHROMA_DB_PATH', './chroma_db')
+    persist_dir = os.getenv('CHROMA_DB_PATH', '.../chroma_db')
     embedding_function = get_embeddings()
     
     vectorstore = Chroma(
