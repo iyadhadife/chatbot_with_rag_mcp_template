@@ -74,6 +74,3 @@ def download():
     model.save(os.getenv('OUTPUT_FOLDER_MODEL'))
     
     print("✅ Terminé ! Modèle sauvegardé.")
-
-if __name__ == "__main__":
-    print(query_rag('mkdir'))
