@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from pathlib import Path
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -27,7 +28,9 @@ def get_vectorstore():
     """
     Récupère la base de données vectorielle existante
     """
-    persist_dir = os.getenv('CHROMA_DB_PATH', '.../chroma_db')
+    current_file_path = Path(__file__).resolve()
+    project_root = current_file_path.parent.parent.parent
+    persist_dir = str(project_root) + '/chroma_db'
     embedding_function = get_embeddings()
     
     vectorstore = Chroma(

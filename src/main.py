@@ -9,15 +9,15 @@ async def envoyer_requete():
     
     # COPIE LE TOKEN DEPUIS TON TERMINAL ICI
     load_dotenv()
-    token = os.getenv('TOKEN_FOR_MCP_SERVER')
+    # token = os.getenv('TOKEN_FOR_MCP_SERVER')
     
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
+    # headers = {
+    #     "Authorization": f"Bearer {token}"
+    # }
 
     print(f"🌐 Connexion à l'inspecteur...")
     try:
-        async with sse_client(url,headers=headers) as (read, write):
+        async with sse_client(url) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 
