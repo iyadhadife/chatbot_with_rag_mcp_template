@@ -1,14 +1,17 @@
 import sys
 import logging
+import uvicorn
 from mcp.server.fastmcp import FastMCP
 from src.rag_engine.retriever import query_rag
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
-from starlette.routing import Mount, Route
-import uvicorn
+from starlette.routing import Mount
 
-# Configuration des logs (Toujours utile)
+#Running command
+#uvicorn src.mcp_server.server:app --host localhost  --port 8000
+
+# Configuration des logs
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
 mcp = FastMCP("MonRAGChatbot")
@@ -24,30 +27,21 @@ def interroger_base_connaissance(question: str) -> str:
     except Exception as e:
         return f"Erreur : {str(e)}"
 
+# --- CONFIGURATION STARLETTE (Déplacée ici pour être visible par Uvicorn) ---
+
+middleware = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
+]
+
+# Cette variable est maintenant au "top-level" du module
+app = Starlette(routes=[Mount("/", mcp.sse_app())], middleware=middleware)
+
+# --- BLOC D'EXÉCUTION DIRECTE ---
 if __name__ == "__main__":
-    import uvicorn
-    from starlette.applications import Starlette
-    from starlette.middleware import Middleware
-    from starlette.middleware.cors import CORSMiddleware
-    from starlette.routing import Mount
-
-    # 1. Configuration CORS pour que l'Inspecteur (et tout le monde) puisse se connecter
-    middleware = [
-        Middleware(
-            CORSMiddleware,
-            allow_origins=["*"],  # Autorise toutes les origines
-            allow_methods=["GET", "POST", "OPTIONS"],  # Autorise les vérifications
-            allow_headers=["*"],
-        )
-    ]
-
-    # 2. LA CORRECTION EST ICI : 
-    # On monte l'app FastMCP à la racine "/" et non pas sur "/sse"
-    # Comme ça, l'adresse finale reste "http://localhost:8000/sse"
-    # (car FastMCP ajoute lui-même son propre suffixe /sse)
-    app = Starlette(routes=[Mount("/", mcp.sse_app())], middleware=middleware)
-
     print("🔓 Serveur RAG prêt sur http://0.0.0.0:8000/sse (CORS activé)")
-    
-    # 3. Lancement
-    uvicorn.run(app, port=8000, host="0.0.0.0")
+    uvicorn.run("src.mcp_server.server:app", port=8000, host="0.0.0.0", reload=True)

@@ -1,30 +1,49 @@
 import asyncio
+from pathlib import Path
 from mcp import ClientSession
 from mcp.client.sse import sse_client
-from dotenv import load_dotenv
-import os
+from langchain_ollama import ChatOllama
 
-async def envoyer_requete():
-    url = "http://localhost:8000/sse" 
-    
-    load_dotenv()
+# Import de ta fonction personnalisée
+from chat_engine.generate_answer import generer_reponse_expert
 
-    print(f"🌐 Connexion à l'inspecteur...")
+# --- CONFIGURATION ---
+URL_MCP = "http://localhost:8000/sse"
+MODEL_NAME = "qwen2.5:0.5b"
+INSTRUCTIONS_FILE = "linux_expert.md"
+
+async def main():
+    # 1. Chargement des instructions
     try:
-        async with sse_client(url) as (read, write):
+        instructions = Path(INSTRUCTIONS_FILE).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        instructions = "Tu es un expert Linux."
+
+    # 2. Initialisation du modèle local
+    llm = ChatOllama(model=MODEL_NAME, temperature=0)
+
+    print(f"🌐 Tentative de connexion au serveur MCP...")
+    
+    try:
+        async with sse_client(URL_MCP) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
+                print("✅ Connecté au RAG. Tapez 'exit' pour quitter.")
                 
-                # Appel de ton outil
-                result = await session.call_tool(
-                    "interroger_base_connaissance", 
-                    arguments={"question": "Comment vérifier le swap ?"}
-                )
-                
-                print("\n[RÉPONSE DU RAG] :")
-                print(result.content[0].text)
+                while True:
+                    user_input = input("\nQuestion > ")
+                    if user_input.lower() in ["exit", "quit"]:
+                        break
+                    
+                    if not user_input.strip():
+                        continue
+
+                    # On appelle la logique située dans chat_engine
+                    await generer_reponse_expert(session, llm, instructions, user_input)
+
     except Exception as e:
-        print(f"Erreur : {e}")
+        print(f"❌ Erreur de connexion au serveur MCP : {e}")
+        print("Vérifie que ton serveur MCP est bien lancé sur http://localhost:8000")
 
 if __name__ == "__main__":
-    asyncio.run(envoyer_requete())
+    asyncio.run(main())
