@@ -1,35 +1,33 @@
-import os
+# 🤖 Chatbot with RAG & MCP Template
 
-readme_content = """# 🤖 Chatbot with RAG & MCP Template
+A structured Python project template for building an intelligent assistant combining Retrieval-Augmented Generation (RAG) and the Model Context Protocol (MCP). Ideal for Agent-to-Agent architectures or information system integrations.
 
-Un modèle de projet structuré en Python pour construire un assistant intelligent combinant la génération augmentée par la recherche (RAG) et le Model Context Protocol (MCP). Idéal pour des architectures Agent-to-Agent ou des intégrations de systèmes d'information.
+## 🚀 Key Features
 
-## 🚀 Fonctionnalités Principales
+- **RAG Engine (Retrieval-Augmented Generation):** Document data ingestion and advanced semantic search to ground the model's responses in concrete facts.
+- **MCP Server (Model Context Protocol):** Seamless integration with external tools and context management via a standardized architecture, facilitating multi-agent workflows.
+- **Chat Engine:** Python orchestration of accurate and contextualized response generation relying on retrieved data.
+- **Expert Personas:** Support for specific personas via textual instructions (e.g., `linux_expert.md`).
+- **Flexible Data Sources:** Native processing of files (like `linux_commands.json`) to enrich the knowledge base.
 
-- **Moteur RAG (Retrieval-Augmented Generation) :** Ingestion de données documentaires et recherche sémantique avancée pour ancrer les réponses du modèle dans des faits concrets.
-- **Serveur MCP (Model Context Protocol) :** Intégration fluide avec des outils externes et gestion du contexte via une architecture standardisée, facilitant les workflows multi-agents.
-- **Moteur de Chat :** Orchestration en Python de la génération de réponses précises et contextualisées en s'appuyant sur les données récupérées.
-- **Personnalités d'Experts :** Support pour des personas spécifiques via des instructions textuelles (ex: `linux_expert.md`).
-- **Sources de Données Flexibles :** Traitement natif de fichiers (comme `linux_commands.json`) pour enrichir la base de connaissances.
-
-## 📁 Architecture du Projet
+## 📁 Project Architecture
 
 ```text
 chatbot_with_rag_mcp_template/
 ├── data/
-│   └── linux_commands.json       # Base de données source pour le RAG
+│   └── linux_commands.json       # Source database for RAG
 ├── src/
 │   ├── chat_engine/
-│   │   └── generate_answer.py    # Logique de génération de réponse par le LLM
+│   │   └── generate_answer.py    # LLM response generation logic
 │   ├── mcp_server/
-│   │   ├── server.py             # Configuration et initialisation du serveur MCP
-│   │   └── tools.py              # Définition des outils accessibles via MCP
+│   │   ├── server.py             # MCP server configuration and initialization
+│   │   └── tools.py              # Definition of tools accessible via MCP
 │   ├── rag_engine/
-│   │   ├── ingest.py             # Script d'ingestion et d'indexation (vectorisation)
-│   │   └── retriever.py          # Logique de recherche sémantique
-│   ├── linux_expert.md           # Prompt système / Contexte de persona
-│   ├── main.py                   # Point d'entrée principal de l'application
-│   └── rag_test.py               # Script de test unitaire pour le pipeline RAG
+│   │   ├── ingest.py             # Ingestion and indexing (vectorization) script
+│   │   └── retriever.py          # Semantic search logic
+│   ├── linux_expert.md           # System prompt / Persona context
+│   ├── main.py                   # Main entry point of the application
+│   └── rag_test.py               # Unit test script for the RAG pipeline
 ├── .gitignore
 ├── README.md
-└── requirements.txt              # Dépendances du projet
+└── requirements.txt              # Project dependencies
