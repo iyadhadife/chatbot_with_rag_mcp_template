@@ -5,5 +5,3 @@ venv/
 .DS_Store
 *.db
 chroma_db/
-.venv
-model
