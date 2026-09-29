@@ -30,3 +30,8 @@ Ce projet implémente un assistant intelligent spécialisé dans l'administratio
 │   └── linux_commands.json    # Base de données brute
 ├── requirements.txt           # Dépendances Python
 └── README.md
+
+
+docker compose up --build -d
+docker compose run --rm chatbot python src/chatbot_langchain/rag_pipeline/ingest.py
+docker compose run --rm chatbot python src/chatbot_langchain/main.py/
