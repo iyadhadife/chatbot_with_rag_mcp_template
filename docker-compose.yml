@@ -3,34 +3,41 @@ version: '3.8'
 services:
   chromadb:
     image: chromadb/chroma:latest
-    container_name: chroma_db
     ports:
       - "8000:8000"
     volumes:
-      - chromadb_data:/chroma/chroma
-    networks:
-      - app_network
+      - chroma_data:/chroma/chroma
+
+  mcp-server:
+      build:
+        context: ./mcp-vector-db
+        dockerfile: Dockerfile
+      ports:
+        - "8001:8001"
+      depends_on:
+        - chromadb
+      environment:
+        - CHROMA_HOST=chromadb
+        - CHROMA_PORT=8000
+        - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      volumes:
+        - ./data:/app/data
+      stdin_open: true   # Indispensable pour maintenir le conteneur éveillé
+      tty: true          # Indispensable pour le flux interactif
 
   chatbot:
     build:
-      context: .           # Le dossier racine de votre projet comme contexteZ
-    container_name: python_chatbot
-    environment:
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-    volumes:
-      - ./src:/app/src
-      - ./data:/app/data
-    depends_on:
-      - chromadb
-    networks:
-      - app_network
+      context: ./chatbot-langchain
+      dockerfile: Dockerfile
     ports:
-      - "8501:8501"
+      - "5000:5000"
+    depends_on:
+      - mcp-server
+    environment:
+      - MCP_SERVER_URL=http://mcp-server:8001
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    stdin_open: true
+    tty: true
 
 volumes:
-  chromadb_data:
-
-networks:
-  app_network:
-    driver: bridge
+  chroma_data:

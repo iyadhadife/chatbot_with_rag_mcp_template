@@ -15,7 +15,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copie de tout le code source et des données dans le conteneur
 COPY src/ ./src/
-COPY data/ ./data/
 
 # Commande par défaut lancée lorsque le conteneur démarre
 CMD ["python", "src/main.py"]

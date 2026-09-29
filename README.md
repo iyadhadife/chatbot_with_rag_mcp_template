@@ -11,7 +11,7 @@ A containerized Retrieval-Augmented Generation (RAG) pipeline designed to intera
 * **Vector Storage:** Utilizes ChromaDB via HTTP client for efficient and persistent document chunk retrieval.
 * **Streaming Responses:** Real-time token generation for a smooth, conversational user experience.
 * **Containerized Environment:** Fully orchestrated using Docker and Docker Compose.
-* **🚧 Coming Soon (MCP Integration):** Model Context Protocol (MCP) servers will soon be introduced to orchestrate multi-source document queries and tool execution cleanly.
+* **MCP Integration:** Model Context Protocol (MCP) servers will soon be introduced to orchestrate multi-source document queries and tool execution cleanly.
 
 ---
 
@@ -31,3 +31,6 @@ chatbot_with_rag_mcp_template/
 ├── Dockerfile             # Container configuration for the chatbot app
 ├── docker-compose.yml     # Multi-container setup (ChromaDB & Chatbot)
 └── requirements.txt       # Python dependencies
+
+
+docker-compose upv
