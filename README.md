@@ -33,4 +33,4 @@ chatbot_with_rag_mcp_template/
 └── requirements.txt       # Python dependencies
 
 
-docker-compose upv
+docker-compose up

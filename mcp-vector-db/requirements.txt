@@ -7,3 +7,5 @@ chromadb
 pypdf
 ollama
 pydantic
+starlette
+uvicorn
