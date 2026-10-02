@@ -1,8 +1,14 @@
 from mcp.server.fastmcp import FastMCP
+import base64
+import json
 import os
+import re
+from pathlib import Path
 
 from rag_pipeline.ingest import ingest_pdfs
 from rag_pipeline.retriever import ChatbotRetriever
+
+PDF_DIR = "./data/pdfs"
 
 mcp = FastMCP("Professional-Document-MCP-Server")
 retriever = ChatbotRetriever()
@@ -11,79 +17,63 @@ retriever = ChatbotRetriever()
 @mcp.tool()
 def ingest_documents() -> str:
     """
-    Lance l'ingestion, la classification et l'indexation des documents PDF.
-    Les CVs sont découpés par sections sémantiques (Compétences, Expériences…).
-    Les autres documents sont découpés par paragraphes avec numéros de page.
-    Chaque chunk embarque des métadonnées riches et des liens vers les chunks voisins.
+    Réindexation COMPLÈTE : supprime toute la base existante puis indexe tous
+    les PDF présents dans data/pdfs.
+    Chaque document est découpé en chunks de taille fixe avec recouvrement,
+    enrichis de métadonnées (type, mots-clés, résumé) puis indexés dans ChromaDB.
     """
     try:
-        ingest_pdfs()
-        return "Ingestion et indexation des documents réalisées avec succès."
+        n = ingest_pdfs(PDF_DIR, reset=True)
+        return f"Base réinitialisée, {n} document(s) indexé(s)."
     except Exception as e:
         return f"Erreur lors de l'ingestion : {str(e)}"
 
 
 @mcp.tool()
-def search_cv(query: str) -> str:
+def add_document(filename: str, content_base64: str) -> str:
     """
-    Recherche des informations dans les CVs (toutes sections confondues).
-    Utilise un filtre doc_type=CV pour ne chercher que dans les CV.
+    Ajoute un PDF (contenu encodé en base64) à data/pdfs et l'indexe, sans
+    toucher aux documents déjà indexés.
     """
     try:
-        return retriever.get_context_by_filter(query, doc_type="CV", n_results=4)
+        name = re.sub(r"[^\w.\- ]", "_", Path(filename).name)
+        if not name.lower().endswith(".pdf"):
+            return f"Refusé : '{filename}' n'est pas un PDF."
+        os.makedirs(PDF_DIR, exist_ok=True)
+        Path(PDF_DIR, name).write_bytes(base64.b64decode(content_base64))
+        n = ingest_pdfs(PDF_DIR, reset=False, only=[name])
+        return f"{name} ajouté et indexé." if n else f"{name} : aucun texte exploitable."
     except Exception as e:
-        return f"Erreur CV : {str(e)}"
+        return f"Erreur lors de l'ajout : {str(e)}"
 
 
 @mcp.tool()
-def search_cv_skills(query: str) -> str:
+def search_documents(query: str) -> str:
     """
-    Recherche spécifiquement dans les sections de compétences des CVs.
-    Idéal pour trouver les technologies, langages et outils maîtrisés par un candidat.
+    Recherche sémantique dans TOUTE la base documentaire (CV, devis, factures,
+    contrats…). Unique outil de recherche : renvoie les passages les plus
+    pertinents, tous documents confondus. Les résultats trop éloignés de la
+    question sont automatiquement filtrés (seuil de distance).
     """
     try:
-        return retriever.get_context_by_filter(
-            query, doc_type="CV", section_type="COMPETENCES", n_results=4
-        )
+        return retriever.get_context(query, n_results=8)
     except Exception as e:
-        return f"Erreur recherche compétences : {str(e)}"
+        return f"Erreur lors de la recherche : {str(e)}"
 
+
+# ── Utilitaire (hors agent) : inventaire pour l'onglet d'inspection ───────────
 
 @mcp.tool()
-def search_devis(query: str) -> str:
+def list_indexed_chunks() -> str:
     """
-    Recherche des informations ou clauses spécifiquement dans les devis.
-    Utilise un filtre doc_type=DEVIS.
-    """
-    try:
-        return retriever.get_context_by_filter(query, doc_type="DEVIS", n_results=4)
-    except Exception as e:
-        return f"Erreur lors de la recherche dans le devis : {str(e)}"
-
-
-@mcp.tool()
-def search_global(query: str) -> str:
-    """
-    Effectue une recherche sémantique globale à travers tous les documents disponibles.
-    Retourne les 6 chunks les plus pertinents, tous types confondus.
+    Retourne, au format JSON, l'inventaire complet des chunks indexés dans
+    ChromaDB, groupés par document, avec leurs métadonnées. Destiné à l'onglet
+    d'inspection de l'interface (pas à la recherche conversationnelle).
     """
     try:
-        return retriever.get_context(query, n_results=6)
+        return json.dumps(retriever.list_all_chunks(), ensure_ascii=False)
     except Exception as e:
-        return f"Erreur lors de la recherche globale : {str(e)}"
-
-
-@mcp.tool()
-def get_linked_context(chunk_id: str) -> str:
-    """
-    Récupère un chunk et ses voisins (précédent et suivant) à partir de son identifiant.
-    Utile pour obtenir plus de contexte autour d'un résultat de recherche.
-    Exemple d'identifiant : 'CV_Ingenieur_IA.pdf_section_2'
-    """
-    try:
-        return retriever.get_linked_chunks(chunk_id)
-    except Exception as e:
-        return f"Erreur lors de la récupération du contexte lié : {str(e)}"
+        return json.dumps({"total": 0, "documents": [], "error": str(e)}, ensure_ascii=False)
 
 
 if __name__ == "__main__":

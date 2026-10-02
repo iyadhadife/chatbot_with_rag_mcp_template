@@ -9,3 +9,5 @@ ollama
 pydantic
 starlette
 uvicorn
+yake          # extraction de mots-clés statistique (CPU, sans modèle)
+networkx      # graphe de phrases pour le résumé extractif TextRank

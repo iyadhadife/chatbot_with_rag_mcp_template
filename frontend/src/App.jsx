@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ChatMessage from './components/ChatMessage'
+import ChunksView from './components/ChunksView'
 
 const WELCOME = {
   id: 0,
@@ -13,12 +14,26 @@ export default function App() {
   const [messages, setMessages] = useState([WELCOME])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [view, setView] = useState('chat')  // 'chat' | 'index'
+  const [models, setModels] = useState([])
+  const [model, setModel] = useState('')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Charge la liste des modèles Ollama installés localement
+  useEffect(() => {
+    fetch('/api/models')
+      .then(r => r.json())
+      .then(data => {
+        setModels(data.models || [])
+        setModel(data.default || (data.models && data.models[0]) || '')
+      })
+      .catch(() => { /* Ollama injoignable : le sélecteur reste vide */ })
+  }, [])
 
   const pushMsg = useCallback((msg) => {
     setMessages(prev => [...prev, { id: nextId++, ...msg }])
@@ -49,7 +64,7 @@ export default function App() {
       const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, model }),
       })
 
       const reader = res.body.getReader()
@@ -83,6 +98,12 @@ export default function App() {
                 return copy
               })
             }
+          } else if (data.context) {
+            setMessages(prev =>
+              prev.map(m => m.id === assistantId
+                ? { ...m, context: data.context, searchQuery: data.search_query || '' }
+                : m)
+            )
           } else if (data.chunk) {
             accumulated += data.chunk
             setMessages(prev =>
@@ -120,7 +141,7 @@ export default function App() {
       setBusy(false)
       inputRef.current?.focus()
     }
-  }, [input, busy, pushMsg])
+  }, [input, busy, model, pushMsg])
 
   const triggerIngest = useCallback(async () => {
     setBusy(true)
@@ -139,6 +160,27 @@ export default function App() {
     }
   }, [busy, pushMsg])
 
+  const uploadRef = useRef(null)
+
+  const uploadPdfs = useCallback(async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length) return
+    setBusy(true)
+    pushMsg({ role: 'system', content: `📄 Ajout de ${files.length} PDF (${files.map(f => f.name).join(', ')})…` })
+    try {
+      const form = new FormData()
+      files.forEach(f => form.append('files', f))
+      const res = await fetch('/api/upload', { method: 'POST', body: form })
+      const data = await res.json()
+      pushMsg({ role: 'system', content: `${data.status === 'success' ? '✅' : '❌'} ${data.message}` })
+    } catch (err) {
+      pushMsg({ role: 'system', content: `❌ Erreur réseau : ${err.message}` })
+    } finally {
+      setBusy(false)
+    }
+  }, [pushMsg])
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) sendMessage(e)
   }
@@ -150,56 +192,98 @@ export default function App() {
         <div className="flex items-center gap-2">
           <span className="text-xl">🤖</span>
           <h1 className="text-base font-semibold text-white">Assistant RAG & MCP</h1>
-          <span className="text-xs text-gray-500 hidden sm:inline">· qwen2.5:0.5b</span>
+          <select
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            disabled={busy || models.length === 0}
+            title="Modèle Ollama (installé localement)"
+            className="text-xs bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-gray-300 focus:outline-none focus:border-indigo-500 disabled:opacity-40 max-w-[160px]"
+          >
+            {models.length === 0 && <option value="">Aucun modèle</option>}
+            {models.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
-        <button
-          onClick={triggerIngest}
-          disabled={busy}
-          className="text-xs px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 rounded-lg transition-colors"
-        >
-          {busy ? '⏳ En cours…' : '📥 Indexer les documents'}
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Onglets */}
+          <nav className="flex bg-gray-800 rounded-lg p-0.5">
+            {[['chat', '💬 Chat'], ['index', '🗂️ Index']].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
+                  view === key ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <input ref={uploadRef} type="file" accept=".pdf" multiple hidden onChange={uploadPdfs} />
+          <button
+            onClick={() => uploadRef.current?.click()}
+            disabled={busy}
+            title="Ajouter des PDF à l'index existant"
+            className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 rounded-lg transition-colors"
+          >
+            ➕ Ajouter des PDF
+          </button>
+          <button
+            onClick={triggerIngest}
+            disabled={busy}
+            className="text-xs px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 rounded-lg transition-colors"
+          >
+            {busy ? '⏳ En cours…' : '📥 Tout réindexer'}
+          </button>
+        </div>
       </header>
 
-      {/* Messages */}
-      <main className="flex-1 overflow-y-auto py-4 space-y-1">
-        {messages.map(msg => (
-          <ChatMessage
-            key={msg.id}
-            role={msg.role}
-            content={msg.content}
-            isStreaming={msg.isStreaming}
-          />
-        ))}
-        <div ref={bottomRef} />
-      </main>
+      {view === 'index' ? (
+        <ChunksView />
+      ) : (
+        <>
+          {/* Messages */}
+          <main className="flex-1 overflow-y-auto py-4 space-y-1">
+            {messages.map(msg => (
+              <ChatMessage
+                key={msg.id}
+                role={msg.role}
+                content={msg.content}
+                context={msg.context}
+                searchQuery={msg.searchQuery}
+                isStreaming={msg.isStreaming}
+              />
+            ))}
+            <div ref={bottomRef} />
+          </main>
 
-      {/* Input */}
-      <footer className="px-4 py-3 bg-gray-900 border-t border-gray-800 shrink-0">
-        <form onSubmit={sendMessage} className="flex gap-2 items-end max-w-4xl mx-auto">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={busy}
-            rows={1}
-            placeholder="Posez votre question… (Entrée pour envoyer, Shift+Entrée pour saut de ligne)"
-            className="flex-1 resize-none bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 disabled:opacity-40 max-h-40 overflow-y-auto"
-            style={{ fieldSizing: 'content' }}
-          />
-          <button
-            type="submit"
-            disabled={busy || !input.trim()}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-sm font-medium transition-colors shrink-0"
-          >
-            Envoyer ↑
-          </button>
-        </form>
-        <p className="text-center text-xs text-gray-600 mt-1.5">
-          LaTeX supporté : <code className="text-gray-500">$...$</code> inline · <code className="text-gray-500">$$...$$</code> display
-        </p>
-      </footer>
+          {/* Input */}
+          <footer className="px-4 py-3 bg-gray-900 border-t border-gray-800 shrink-0">
+            <form onSubmit={sendMessage} className="flex gap-2 items-end max-w-4xl mx-auto">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={busy}
+                rows={1}
+                placeholder="Posez votre question… (Entrée pour envoyer, Shift+Entrée pour saut de ligne)"
+                className="flex-1 resize-none bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 disabled:opacity-40 max-h-40 overflow-y-auto"
+                style={{ fieldSizing: 'content' }}
+              />
+              <button
+                type="submit"
+                disabled={busy || !input.trim()}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-sm font-medium transition-colors shrink-0"
+              >
+                Envoyer ↑
+              </button>
+            </form>
+            <p className="text-center text-xs text-gray-600 mt-1.5">
+              LaTeX supporté : <code className="text-gray-500">$...$</code> inline · <code className="text-gray-500">$$...$$</code> display
+            </p>
+          </footer>
+        </>
+      )}
     </div>
   )
 }

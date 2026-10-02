@@ -21,6 +21,10 @@ services:
         - CHROMA_PORT=8000
         - OLLAMA_BASE_URL=http://host.docker.internal:11434
         - OLLAMA_MODEL=qwen2.5:0.5b
+        - ENRICH_CHUNKS=false         # heuristiques rapides sur CPU (pas de LLM par chunk)
+        - PROFILE_MODEL=llama3.2:3b   # LLM qui rédige le profil de chaque document (1 appel/PDF)
+        - EMBEDDING_MODEL=bge-m3     # multilingue (FR) — `ollama pull bge-m3` sur l'hôte
+        - MAX_RETRIEVAL_DISTANCE=0.9  # distance cosine max (0=identique, 2=opposé)
       volumes:
         - ./data:/app/data
       stdin_open: true   # Indispensable pour maintenir le conteneur éveillé
@@ -38,6 +42,7 @@ services:
       - MCP_SERVER_URL=http://mcp-server:8001/sse
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=llama3.2:3b
+      - MCP_TIMEOUT_SECONDS=600   # ingestion CPU longue (LLM par doc × nb PDFs)
     stdin_open: true
     tty: true
 

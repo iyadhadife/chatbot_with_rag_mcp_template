@@ -1,12 +1,14 @@
 import asyncio
+import base64
 import json
+import logging
 import os
 import traceback
 
 from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
 
-from config import init_llm_with_tools
+from config import get_llms, list_ollama_models, DEFAULT_MODEL
 from system_prompt import get_system_instructions
 from history_manager import HistoryManager
 from langchain_core.messages import ToolMessage, AIMessage
@@ -16,23 +18,53 @@ from mcp.client.sse import sse_client
 
 app = Flask(__name__)
 CORS(app)
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # ── Global initialisation ─────────────────────────────────────────────────────
-llm_with_tools, llm_base, tools = init_llm_with_tools()
 history_manager = HistoryManager(get_system_instructions())
 
-MCP_URL = os.getenv("MCP_SERVER_URL", "http://mcp-server:8001/sse")
+MCP_URL     = os.getenv("MCP_SERVER_URL", "http://mcp-server:8001/sse")
+MCP_TIMEOUT = float(os.getenv("MCP_TIMEOUT_SECONDS", "120"))  # long calls (RAG + LLM)
 
 
 # ── MCP helper ────────────────────────────────────────────────────────────────
-async def _call_mcp(tool_name: str, arguments: dict = None):
+async def _call_mcp_once(tool_name: str, arguments: dict) -> str:
     async with sse_client(MCP_URL) as streams:
         async with ClientSession(streams[0], streams[1]) as session:
             await session.initialize()
-            result = await session.call_tool(tool_name, arguments or {})
+            result = await session.call_tool(tool_name, arguments)
             if hasattr(result, "content") and result.content:
                 return "\n".join(getattr(c, "text", str(c)) for c in result.content)
             return str(result)
+
+
+async def _call_mcp(tool_name: str, arguments: dict = None, retries: int = 1) -> str:
+    """
+    Appelle un outil MCP avec timeout et retry.
+    - MCPError / ConnectionClosed → retry une fois avant d'échouer
+    - asyncio.TimeoutError → propagé directement (pas la peine de retenter)
+    """
+    args = arguments or {}
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return await asyncio.wait_for(
+                _call_mcp_once(tool_name, args),
+                timeout=MCP_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            raise TimeoutError(
+                f"L'outil MCP '{tool_name}' n'a pas répondu dans {MCP_TIMEOUT:.0f}s."
+            )
+        except Exception as exc:
+            last_exc = exc
+            if attempt < retries:
+                logger.warning(
+                    f"MCP '{tool_name}' — tentative {attempt + 1} échouée ({exc}), retry…"
+                )
+                await asyncio.sleep(1)
+    raise last_exc  # type: ignore[misc]
 
 
 def run_async(coro):
@@ -49,14 +81,18 @@ def run_async(coro):
 def chat_stream():
     data = request.get_json() or {}
     user_query = data.get("message", "").strip()
+    model_name = (data.get("model") or DEFAULT_MODEL).strip()
     if not user_query:
         return jsonify({"error": "Message vide"}), 400
+
+    # Modèle choisi par l'utilisateur (sinon modèle par défaut)
+    llm_with_tools, llm_base = get_llms(model_name)
 
     def generate():
         try:
             history_manager.add_user_message(user_query)
 
-            # Phase 1 – tool selection (non-streaming, fast with 0.5b)
+            # Phase 1 – sélection d'outil (non-streaming)
             response = llm_with_tools.invoke(history_manager.get_history())
             history_manager.get_history().append(response)
 
@@ -69,10 +105,19 @@ def chat_stream():
                     # Notify frontend which tool is running
                     yield f"data: {json.dumps({'status': name})}\n\n"
 
+                    # Le petit LLM reformule mal (« appartien au », noms inventés) :
+                    # on cherche avec la question réelle de l'utilisateur.
+                    if name == "search_documents":
+                        args = {**args, "query": user_query}
+
                     try:
                         result = run_async(_call_mcp(name, args))
                     except Exception as e:
                         result = f"Erreur outil: {e}"
+
+                    # Stream the tool result so the frontend can show sources
+                    if name == "search_documents":
+                        yield f"data: {json.dumps({'context': result, 'search_query': args.get('query', '')})}\n\n"
 
                     history_manager.add_tool_message(str(result), tid)
 
@@ -103,15 +148,83 @@ def chat_stream():
     )
 
 
+@app.route("/api/models", methods=["GET"])
+def models_endpoint():
+    """Liste les modèles Ollama installés localement (pour le sélecteur)."""
+    try:
+        models = list_ollama_models()
+        default = DEFAULT_MODEL if DEFAULT_MODEL in models else (models[0] if models else DEFAULT_MODEL)
+        return jsonify({"models": models, "default": default})
+    except Exception as e:
+        logger.error(f"Erreur liste modèles Ollama : {e}")
+        return jsonify({
+            "models": [DEFAULT_MODEL],
+            "default": DEFAULT_MODEL,
+            "error": "Ollama injoignable — modèle par défaut utilisé.",
+            "detail": str(e),
+        }), 502
+
+
+@app.route("/api/chunks", methods=["GET"])
+def chunks_endpoint():
+    """Inventaire des chunks indexés (pour l'onglet d'inspection)."""
+    try:
+        raw = run_async(_call_mcp("list_indexed_chunks", {}))
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            data = {"total": 0, "documents": [], "error": "Réponse MCP non-JSON", "raw": str(raw)[:500]}
+        return jsonify(data)
+    except TimeoutError as e:
+        logger.error(f"Timeout list_indexed_chunks : {e}")
+        return jsonify({"total": 0, "documents": [], "error": str(e)}), 504
+    except Exception as e:
+        logger.error(f"Erreur connexion MCP (list_indexed_chunks) : {e}")
+        return jsonify({
+            "total": 0, "documents": [],
+            "error": "Le serveur MCP est injoignable ou a planté.",
+            "detail": str(e),
+        }), 502
+
+
 @app.route("/api/context", methods=["POST"])
 def context_endpoint():
     try:
         result = run_async(_call_mcp("ingest_documents", {}))
         return jsonify({"status": "success", "message": str(result)})
+    except TimeoutError as e:
+        logger.error(f"Timeout ingestion MCP : {e}")
+        return jsonify({"status": "error", "message": str(e)}), 504
     except Exception as e:
+        logger.error(f"Erreur connexion MCP (ingest_documents) : {e}")
         traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": "Le serveur MCP est injoignable ou a planté. Vérifiez les logs du conteneur mcp-server.",
+            "detail": str(e),
+        }), 502
 
+
+@app.route("/api/upload", methods=["POST"])
+def upload_endpoint():
+    """Ajoute et indexe un ou plusieurs PDF sans toucher à la base existante."""
+    files = [f for f in request.files.getlist("files") if f.filename]
+    if not files:
+        return jsonify({"status": "error", "message": "Aucun fichier reçu."}), 400
+    results, ok = [], True
+    for f in files:
+        try:
+            payload = base64.b64encode(f.read()).decode("ascii")
+            msg = str(run_async(_call_mcp(
+                "add_document", {"filename": f.filename, "content_base64": payload}
+            )))
+            ok = ok and msg.endswith("indexé.")
+            results.append(msg)
+        except Exception as e:
+            logger.error(f"Erreur ajout {f.filename} : {e}")
+            ok = False
+            results.append(f"{f.filename} : erreur ({e})")
+    return jsonify({"status": "success" if ok else "error", "message": "\n".join(results)})
 
 
 if __name__ == "__main__":
