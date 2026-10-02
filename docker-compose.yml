@@ -24,7 +24,7 @@ services:
         - ENRICH_CHUNKS=false         # heuristiques rapides sur CPU (pas de LLM par chunk)
         - PROFILE_MODEL=llama3.2:3b   # LLM qui rédige le profil de chaque document (1 appel/PDF)
         - EMBEDDING_MODEL=bge-m3     # multilingue (FR) — `ollama pull bge-m3` sur l'hôte
-        - MAX_RETRIEVAL_DISTANCE=0.9  # distance cosine max (0=identique, 2=opposé)
+        - MAX_RETRIEVAL_DISTANCE=0.80  # distance cosine max (0=identique, 2=opposé)
       volumes:
         - ./data:/app/data
       stdin_open: true   # Indispensable pour maintenir le conteneur éveillé

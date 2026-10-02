@@ -8,6 +8,8 @@ from agent_tools import get_tools_list
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 DEFAULT_MODEL   = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+# Fenêtre de contexte explicite (le défaut d'Ollama, 2048-4096, tronque silencieusement)
+NUM_CTX         = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
 
 _TOOLS = get_tools_list()
 
@@ -18,7 +20,7 @@ def get_llms(model_name: str):
     Retourne (llm_with_tools, llm_base) pour le modèle Ollama demandé.
     Mis en cache par nom de modèle (évite de reconstruire à chaque requête).
     """
-    llm = ChatOllama(model=model_name, base_url=OLLAMA_BASE_URL, temperature=0.1)
+    llm = ChatOllama(model=model_name, base_url=OLLAMA_BASE_URL, temperature=0.1, num_ctx=NUM_CTX)
     return llm.bind_tools(_TOOLS), llm
 
 

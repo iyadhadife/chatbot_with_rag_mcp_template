@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import Logo from './Logo'
 
 const TOOL_LABELS = {
   ingest_documents: '📥 Ingestion des documents…',
@@ -90,7 +91,7 @@ function ContextPanel({ context, searchQuery }) {
 export default function ChatMessage({ role, content, context, searchQuery, isStreaming }) {
   if (role === 'status') {
     return (
-      <div className="flex justify-start px-4 py-1">
+      <div className="flex justify-start pl-10">
         <span className="text-xs text-indigo-400 italic animate-pulse">
           {TOOL_LABELS[content] ?? `⚙️ ${content}…`}
         </span>
@@ -100,7 +101,7 @@ export default function ChatMessage({ role, content, context, searchQuery, isStr
 
   if (role === 'system') {
     return (
-      <div className="flex justify-center px-4 py-1">
+      <div className="flex justify-center">
         <span className="text-xs text-yellow-400/80 italic bg-yellow-900/20 px-3 py-1 rounded-full">
           {content}
         </span>
@@ -110,42 +111,33 @@ export default function ChatMessage({ role, content, context, searchQuery, isStr
 
   const isUser = role === 'user'
 
-  return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} px-4 py-1`}>
-      {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-sm mr-2 mt-0.5 shrink-0">
-          🤖
-        </div>
-      )}
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-          isUser
-            ? 'bg-indigo-600 text-white rounded-tr-sm'
-            : 'bg-gray-800 text-gray-100 rounded-tl-sm border border-gray-700'
-        }`}
-      >
-        {isUser ? (
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-gray-800 px-4 py-2.5 text-[15px] text-gray-100">
           <span className="whitespace-pre-wrap">{content}</span>
-        ) : (
-          <div className="prose-chat">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[rehypeKatex]}
-            >
-              {content}
-            </ReactMarkdown>
-            {isStreaming && (
-              <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
-            )}
-            <ContextPanel context={context} searchQuery={searchQuery} />
-          </div>
-        )}
-      </div>
-      {isUser && (
-        <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center text-sm ml-2 mt-0.5 shrink-0">
-          👤
         </div>
-      )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex gap-3">
+      <div className="mt-0.5 shrink-0"><Logo size={26} /></div>
+      <div className="min-w-0 flex-1 text-[15px] text-gray-100">
+        <div className="prose-chat">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          >
+            {content}
+          </ReactMarkdown>
+          {isStreaming && (
+            <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
+          )}
+          <ContextPanel context={context} searchQuery={searchQuery} />
+        </div>
+      </div>
     </div>
   )
 }

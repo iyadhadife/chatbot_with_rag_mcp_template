@@ -11,7 +11,7 @@ from flask_cors import CORS
 from config import get_llms, list_ollama_models, DEFAULT_MODEL
 from system_prompt import get_system_instructions
 from history_manager import HistoryManager
-from langchain_core.messages import ToolMessage, AIMessage
+from langchain_core.messages import ToolMessage
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -90,11 +90,13 @@ def chat_stream():
 
     def generate():
         try:
-            history_manager.add_user_message(user_query)
+            # Messages du tour : l'historique n'est inclus que si la question
+            # en dépend, et les passages RAG ne survivent pas au tour.
+            messages = history_manager.build_messages(user_query)
 
             # Phase 1 – sélection d'outil (non-streaming)
-            response = llm_with_tools.invoke(history_manager.get_history())
-            history_manager.get_history().append(response)
+            response = llm_with_tools.invoke(messages)
+            messages.append(response)
 
             if hasattr(response, "tool_calls") and response.tool_calls:
                 for tc in response.tool_calls:
@@ -108,7 +110,7 @@ def chat_stream():
                     # Le petit LLM reformule mal (« appartien au », noms inventés) :
                     # on cherche avec la question réelle de l'utilisateur.
                     if name == "search_documents":
-                        args = {**args, "query": user_query}
+                        args = {**args, "query": history_manager.search_query(user_query)}
 
                     try:
                         result = run_async(_call_mcp(name, args))
@@ -119,26 +121,25 @@ def chat_stream():
                     if name == "search_documents":
                         yield f"data: {json.dumps({'context': result, 'search_query': args.get('query', '')})}\n\n"
 
-                    history_manager.add_tool_message(str(result), tid)
+                    messages.append(ToolMessage(content=str(result), tool_call_id=tid))
 
                 # Phase 2 – stream final answer
                 full = ""
-                for chunk in llm_base.stream(history_manager.get_history()):
+                for chunk in llm_base.stream(messages):
                     if chunk.content:
                         full += chunk.content
                         yield f"data: {json.dumps({'chunk': chunk.content})}\n\n"
-                history_manager.add_ai_message(full)
+                history_manager.add_exchange(user_query, full)
 
             else:
                 # Direct answer – send in one shot
-                history_manager.add_ai_message(response.content)
+                history_manager.add_exchange(user_query, response.content)
                 yield f"data: {json.dumps({'chunk': response.content})}\n\n"
 
             yield f"data: {json.dumps({'done': True})}\n\n"
 
         except Exception as e:
             traceback.print_exc()
-            history_manager.rollback_last()
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return Response(
@@ -146,6 +147,13 @@ def chat_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.route("/api/reset", methods=["POST"])
+def reset_endpoint():
+    """Nouvelle conversation : oublie l'historique côté serveur."""
+    history_manager.reset()
+    return jsonify({"status": "success"})
 
 
 @app.route("/api/models", methods=["GET"])

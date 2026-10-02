@@ -28,6 +28,7 @@ MAX_DISTANCE = float(os.getenv("MAX_RETRIEVAL_DISTANCE", "0.8"))
 DOC_TOP_K        = int(os.getenv("DOC_TOP_K", "3"))
 DOC_MAX_DISTANCE = float(os.getenv("DOC_MAX_DISTANCE", "0.9"))
 DOC_MARGIN       = float(os.getenv("DOC_MARGIN", "0.12"))  # écart toléré avec le meilleur
+CHUNK_MARGIN     = float(os.getenv("CHUNK_MARGIN", "0.15"))  # idem pour les chunks
 
 # Poids du re-ranking hybride
 _W_SEMANTIC  = float(os.getenv("HYBRID_W_SEMANTIC", "0.7"))   # poids score sémantique
@@ -291,22 +292,27 @@ class ChatbotRetriever:
             all_scored = [_score(d, m, dist)
                           for d, m, dist in zip(documents, metadatas, distances)]
 
-            scored = [s for s in all_scored if s[2] <= MAX_DISTANCE]
+            # Un chunk n'est retenu que s'il est assez précis :
+            #  - distance <= MAX_DISTANCE (seuil absolu)
+            #  - et pas trop loin du meilleur chunk (CHUNK_MARGIN, seuil relatif)
+            best_dist = min((s[2] for s in all_scored), default=None)
+            scored = [s for s in all_scored
+                      if s[2] <= MAX_DISTANCE and s[2] <= best_dist + CHUNK_MARGIN]
             if all_scored:
                 logger.info(
-                    f"  chunks : {len(scored)}/{len(all_scored)} sous le seuil "
-                    f"{MAX_DISTANCE} (min dist={min(s[2] for s in all_scored):.3f})"
+                    f"  chunks : {len(scored)}/{len(all_scored)} retenus "
+                    f"(seuil {MAX_DISTANCE}, marge {CHUNK_MARGIN}, min dist={best_dist:.3f})"
                 )
 
-            if not scored and ids:
-                # Le document a été choisi par son profil : on garde ses
-                # meilleurs passages même si le seuil par chunk n'est pas atteint.
-                scored = sorted(all_scored, key=lambda s: s[2])[:3]
-
             if not scored:
-                best = f"{min(s[2] for s in all_scored):.2f}" if all_scored else "?"
-                return ("Aucun passage pertinent trouvé dans les documents indexés "
-                        f"pour cette question (distance min {best} > seuil {MAX_DISTANCE}).")
+                best = f"{best_dist:.2f}" if best_dist is not None else "?"
+                no_chunk = ("Aucun passage assez précis trouvé dans les documents indexés "
+                            f"pour cette question (distance min {best} > seuil {MAX_DISTANCE}).")
+                if selected:
+                    # Le document est identifié, mais aucun passage n'est fiable :
+                    # on renvoie sa fiche seule, sans passage non pertinent.
+                    return f"{self._format_profiles(selected)}\n\n{no_chunk}"
+                return no_chunk
 
             scored.sort(key=lambda x: x[3], reverse=True)
             top = scored[:n_results]
