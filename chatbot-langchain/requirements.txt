@@ -1,0 +1,8 @@
+langchain
+langchain-core
+langchain-community
+langchain-ollama
+pydantic
+flask
+flask-cors
+mcp[cli]

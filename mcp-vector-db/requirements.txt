@@ -1,0 +1,13 @@
+mcp==1.2.0
+langchain
+langchain-core
+langchain-community
+langchain-ollama
+chromadb
+pypdf
+ollama
+pydantic
+starlette
+uvicorn
+yake          # extraction de mots-clés statistique (CPU, sans modèle)
+networkx      # graphe de phrases pour le résumé extractif TextRank
