@@ -15,6 +15,20 @@ A containerized Retrieval-Augmented Generation (RAG) pipeline designed to intera
 
 ---
 
+## 🎬 Demo & Results
+
+### Live demo
+
+![Demo: asking questions about a CV and a quote](docs/media/demo.gif)
+
+### Screenshots
+
+| Answer with RAG sources | Indexed chunks & metadata |
+|---|---|
+| ![Chat interface](docs/media/chat.png) | ![Indexed chunks](docs/media/chunks.png) |
+
+---
+
 ## 📁 Project Structure
 
 ```text
