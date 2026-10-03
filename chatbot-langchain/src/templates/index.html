@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot RAG MCP</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md">
+        <h1 class="text-xl font-bold text-blue-400">🤖 Assistant RAG & MCP</h1>
+        <button onclick="triggerContext()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer">
+            🔄 Mettre à jour le Contexte (/context)
+        </button>
+    </header>
+
+    <!-- Chat Box -->
+    <main id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-4xl w-full mx-auto">
+        <div class="flex justify-start">
+            <div class="bg-gray-800 text-gray-200 p-3 rounded-2xl max-w-md shadow">
+                Bonjour ! Posez-moi vos questions sur vos documents ou cliquez sur le bouton de synchronisation pour ingérer vos PDF.
+            </div>
+        </div>
+    </main>
+
+    <!-- Input Form -->
+    <footer class="bg-gray-800 border-t border-gray-700 p-4 shadow-lg">
+        <form id="chat-form" onsubmit="sendMessage(event)" class="max-w-4xl mx-auto flex gap-3">
+            <input type="text" id="user-input" placeholder="Écrivez votre message ici..." autocomplete="off"
+                class="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 focus:outline-none focus:border-blue-500">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-medium transition cursor-pointer">
+                Envoyer
+            </button>
+        </form>
+    </footer>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+
+        async function sendMessage(event) {
+            event.preventDefault();
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            appendMessage(text, 'user');
+            userInput.value = '';
+
+            const loadingId = appendMessage("Réflexion en cours...", 'assistant', true);
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await response.json();
+                
+                document.getElementById(loadingId).remove();
+                if (data.response) {
+                    appendMessage(data.response, 'assistant');
+                } else {
+                    appendMessage("Erreur : Réponse vide du serveur.", 'assistant');
+                }
+            } catch (err) {
+                document.getElementById(loadingId).remove();
+                appendMessage("Erreur de connexion au serveur.", 'assistant');
+            }
+        }
+
+        async function triggerContext() {
+            appendMessage("Lancement de l'ingestion des documents (/context)...", 'system');
+            try {
+                const response = await fetch('/api/context', { method: 'POST' });
+                const data = await response.json();
+                appendMessage(data.message || data.status || "Contexte mis à jour.", 'system');
+            } catch (err) {
+                appendMessage("Erreur lors de l'appel d'ingestion.", 'system');
+            }
+        }
+
+        function appendMessage(text, sender, isLoading = false) {
+            const id = 'msg-' + Math.random().toString(36).substring(2, 9);
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+
+            let bg = 'bg-gray-800 text-gray-200';
+            if (sender === 'user') bg = 'bg-blue-600 text-white';
+            if (sender === 'system') bg = 'bg-yellow-800 text-yellow-100 italic text-sm';
+
+            div.innerHTML = `<div class="${bg} p-3 rounded-2xl max-w-md shadow">${text}</div>`;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return id;
+        }
+    </script>
+</body>
+</html>

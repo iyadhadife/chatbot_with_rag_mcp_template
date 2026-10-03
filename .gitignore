@@ -1,7 +1,14 @@
 __pycache__/
+**/__pycache__/
 *.py[cod]
+*.pyc
 venv/
+.venv/
 .env
 .DS_Store
 *.db
 chroma_db/
+node_modules/
+dist/
+.vite/
+
