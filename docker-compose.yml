@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chroma_db
+    ports:
+      - "8000:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    networks:
+      - app_network
+
+  chatbot:
+    build:
+      context: .           # Le dossier racine de votre projet comme contexteZ
+    container_name: python_chatbot
+    environment:
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    depends_on:
+      - chromadb
+    networks:
+      - app_network
+    ports:
+      - "8501:8501"
+
+volumes:
+  chromadb_data:
+
+networks:
+  app_network:
+    driver: bridge
